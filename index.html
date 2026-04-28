@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Ping Pong Instant Replay</title>
+<title>Ping Pong Pro App</title>
 
 <style>
 body {
@@ -13,11 +13,26 @@ body {
   text-align: center;
 }
 
-h1 {
-  margin: 15px;
+h1 { margin: 15px; }
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 10px;
 }
 
-video {
+button {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.tab-btn { background: #334155; color: white; }
+.active { background: #22c55e; color: black; }
+
+video, canvas {
   width: 80%;
   max-width: 600px;
   border-radius: 12px;
@@ -25,36 +40,61 @@ video {
 }
 
 .controls {
-  margin: 15px;
+  margin: 10px;
 }
 
-button {
-  padding: 10px 15px;
+.small {
+  background: #3b82f6;
+  color: white;
   margin: 5px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 16px;
 }
+.danger { background: #ef4444; }
+.replay { background: #22c55e; }
 
-.start { background: #22c55e; }
-.stop { background: #ef4444; }
-.replay { background: #3b82f6; }
+#speedList {
+  margin-top: 10px;
+}
 </style>
 </head>
 
 <body>
 
-<h1>🏓 Instant Replay Ping Pong</h1>
+<h1>🏓 Ping Pong Pro</h1>
 
-<video id="live" autoplay muted playsinline></video>
-<br>
-<video id="replay" controls></video>
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('live')">🎥 Replay</button>
+  <button class="tab-btn" onclick="showTab('train')">🏓 Entraînement</button>
+</div>
 
-<div class="controls">
-  <button class="start" onclick="startCamera()">▶ Start</button>
-  <button class="stop" onclick="stopCamera()">⏹ Stop</button>
-  <button class="replay" onclick="playReplay()">🎬 Replay</button>
+<!-- ================= LIVE + REPLAY ================= -->
+<div id="liveTab">
+
+  <video id="live" autoplay muted playsinline></video>
+  <br>
+  <video id="replay" controls></video>
+
+  <div class="controls">
+    <button class="small" onclick="startCamera()">▶ Start</button>
+    <button class="danger" onclick="stopCamera()">⏹ Stop</button>
+    <button class="replay" onclick="playReplay()">🎬 Replay</button>
+  </div>
+
+</div>
+
+<!-- ================= TRAINING ================= -->
+<div id="trainTab" style="display:none">
+
+  <video id="trainVideo" autoplay muted playsinline></video>
+  <canvas id="overlay"></canvas>
+
+  <div class="controls">
+    <button class="small" onclick="startCamera()">▶ Start</button>
+    <button class="danger" onclick="stopCamera()">⏹ Stop</button>
+    <button class="replay" onclick="clearPoints()">🧹 Reset</button>
+  </div>
+
+  <div id="speedList"></div>
+
 </div>
 
 <script>
@@ -62,53 +102,53 @@ let stream;
 let recorder;
 let chunks = [];
 
+// ===== CAMERA =====
 const live = document.getElementById("live");
 const replay = document.getElementById("replay");
 
+const trainVideo = document.getElementById("trainVideo");
+const canvas = document.getElementById("overlay");
+const ctx = canvas.getContext("2d");
+
+let points = [];
+
+// ================= START CAMERA =================
 async function startCamera() {
   stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+
   live.srcObject = stream;
+  trainVideo.srcObject = stream;
 
   chunks = [];
 
-  // choisir format compatible
-  let options = {};
-
-  if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
-    options.mimeType = "video/webm;codecs=vp8";
-  }
-
-  recorder = new MediaRecorder(stream, options);
+  recorder = new MediaRecorder(stream);
 
   recorder.ondataavailable = (e) => {
     if (e.data.size > 0) {
       chunks.push(e.data);
 
-      // garder environ 5 secondes
       if (chunks.length > 25) {
         chunks.shift();
       }
     }
   };
 
-  recorder.start(200); // chunk toutes les 200ms
+  recorder.start(200);
 }
 
+// ================= STOP =================
 function stopCamera() {
-  if (recorder && recorder.state !== "inactive") {
-    recorder.stop();
-  }
-
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
-  }
+  if (recorder && recorder.state !== "inactive") recorder.stop();
+  if (stream) stream.getTracks().forEach(t => t.stop());
 
   live.srcObject = null;
+  trainVideo.srcObject = null;
 }
 
+// ================= REPLAY =================
 function playReplay() {
   if (chunks.length === 0) {
-    alert("Attends un peu que la vidéo se remplisse !");
+    alert("Attends un peu !");
     return;
   }
 
@@ -116,8 +156,72 @@ function playReplay() {
   const url = URL.createObjectURL(blob);
 
   replay.src = url;
-  replay.playbackRate = 0.5; // ralenti
+  replay.playbackRate = 0.5;
   replay.play();
+}
+
+// ================= TRAINING CLICK =================
+trainVideo.addEventListener("click", (e) => {
+  const rect = trainVideo.getBoundingClientRect();
+
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  const t = performance.now();
+
+  points.push({ x, y, t });
+
+  draw();
+
+  if (points.length > 1) {
+    const p1 = points[points.length - 2];
+    const p2 = points[points.length - 1];
+
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const time = (p2.t - p1.t) / 1000;
+
+    const speed = (dist / time).toFixed(2);
+
+    document.getElementById("speedList").innerHTML +=
+      `<div>⚡ ${speed} px/s</div>`;
+  }
+});
+
+// ================= DRAW =================
+function draw() {
+  canvas.width = trainVideo.videoWidth;
+  canvas.height = trainVideo.videoHeight;
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  ctx.strokeStyle = "red";
+  ctx.lineWidth = 3;
+
+  for (let i = 1; i < points.length; i++) {
+    ctx.beginPath();
+    ctx.moveTo(points[i-1].x, points[i-1].y);
+    ctx.lineTo(points[i].x, points[i].y);
+    ctx.stroke();
+  }
+}
+
+// ================= RESET =================
+function clearPoints() {
+  points = [];
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById("speedList").innerHTML = "";
+}
+
+// ================= TABS =================
+function showTab(tab) {
+  document.getElementById("liveTab").style.display = tab === "live" ? "block" : "none";
+  document.getElementById("trainTab").style.display = tab === "train" ? "block" : "none";
+
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  event.target.classList.add("active");
 }
 </script>
 
