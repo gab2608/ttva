@@ -2,173 +2,122 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Ping Pong Replay</title>
+<title>Ping Pong Instant Replay</title>
 
 <style>
 body {
   margin: 0;
-  font-family: "Segoe UI", sans-serif;
-  background: linear-gradient(135deg, #0f172a, #1e293b);
+  font-family: Arial;
+  background: #0f172a;
   color: white;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  text-align: center;
 }
 
 h1 {
-  margin: 20px;
-}
-
-.container {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  width: 90%;
-  max-width: 1000px;
-}
-
-.card {
-  background: rgba(255,255,255,0.05);
-  padding: 15px;
-  border-radius: 20px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  margin: 15px;
 }
 
 video {
-  width: 100%;
-  border-radius: 15px;
+  width: 80%;
+  max-width: 600px;
+  border-radius: 12px;
   background: black;
 }
 
 .controls {
-  margin-top: 15px;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  margin: 15px;
 }
 
 button {
-  border: none;
   padding: 10px 15px;
-  border-radius: 12px;
+  margin: 5px;
+  border: none;
+  border-radius: 10px;
   cursor: pointer;
-  font-weight: 500;
-  transition: 0.2s;
+  font-size: 16px;
 }
 
-button:hover {
-  transform: scale(1.05);
-}
-
-.primary { background: #22c55e; color: black; }
-.secondary { background: #3b82f6; }
-.danger { background: #ef4444; }
-.slow { background: #f59e0b; }
-
+.start { background: #22c55e; }
+.stop { background: #ef4444; }
+.replay { background: #3b82f6; }
 </style>
 </head>
 
 <body>
 
-<h1>🏓 Instant Replay</h1>
+<h1>🏓 Instant Replay Ping Pong</h1>
+
+<video id="live" autoplay muted playsinline></video>
+<br>
+<video id="replay" controls></video>
 
 <div class="controls">
-  <button class="primary" onclick="startCamera()">▶ Start</button>
-  <button class="danger" onclick="stopCamera()">⏹ Stop</button>
-</div>
-
-<div class="container">
-
-  <div class="card">
-    <h3>🎥 Live</h3>
-    <video id="live" autoplay muted playsinline></video>
-  </div>
-
-  <div class="card">
-    <h3>🎬 Replay</h3>
-    <video id="replay" controls></video>
-
-    <div class="controls">
-      <button class="primary" onclick="startReplay()">▶ Replay</button>
-      <button class="slow" onclick="setSpeed(0.5)">🐢 0.5x</button>
-      <button class="slow" onclick="setSpeed(0.25)">🐢 0.25x</button>
-      <button class="secondary" onclick="setSpeed(1)">⚡ Normal</button>
-    </div>
-  </div>
-
+  <button class="start" onclick="startCamera()">▶ Start</button>
+  <button class="stop" onclick="stopCamera()">⏹ Stop</button>
+  <button class="replay" onclick="playReplay()">🎬 Replay</button>
 </div>
 
 <script>
-let mediaRecorder;
-let buffer = [];
-let stream = null;
+let stream;
+let recorder;
+let chunks = [];
 
 const live = document.getElementById("live");
 const replay = document.getElementById("replay");
 
-// START caméra
 async function startCamera() {
-  if (stream) return;
+  stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  live.srcObject = stream;
 
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    live.srcObject = stream;
+  chunks = [];
 
-    mediaRecorder = new MediaRecorder(stream);
+  // choisir format compatible
+  let options = {};
 
-    buffer = [];
+  if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
+    options.mimeType = "video/webm;codecs=vp8";
+  }
 
-    mediaRecorder.ondataavailable = e => {
-      if (e.data.size > 0) {
-        buffer.push(e.data);
+  recorder = new MediaRecorder(stream, options);
 
-        // ~5 secondes buffer
-        if (buffer.length > 25) {
-          buffer.shift();
-        }
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) {
+      chunks.push(e.data);
+
+      // garder environ 5 secondes
+      if (chunks.length > 25) {
+        chunks.shift();
       }
-    };
+    }
+  };
 
-    mediaRecorder.start(200);
-
-  } catch (err) {
-    alert("Erreur caméra: " + err);
-  }
+  recorder.start(200); // chunk toutes les 200ms
 }
 
-// STOP caméra
 function stopCamera() {
-  if (!stream) return;
-
-  stream.getTracks().forEach(track => track.stop());
-  live.srcObject = null;
-  stream = null;
-
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stop();
+  if (recorder && recorder.state !== "inactive") {
+    recorder.stop();
   }
+
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
+
+  live.srcObject = null;
 }
 
-// REPLAY
-function startReplay() {
-  if (buffer.length === 0) {
-    alert("Pas encore de vidéo !");
+function playReplay() {
+  if (chunks.length === 0) {
+    alert("Attends un peu que la vidéo se remplisse !");
     return;
   }
 
-  const blob = new Blob(buffer, { type: "video/webm" });
+  const blob = new Blob(chunks, { type: "video/webm" });
   const url = URL.createObjectURL(blob);
 
   replay.src = url;
-  replay.playbackRate = 0.5;
+  replay.playbackRate = 0.5; // ralenti
   replay.play();
-}
-
-// vitesse
-function setSpeed(rate) {
-  replay.playbackRate = rate;
 }
 </script>
 
