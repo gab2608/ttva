@@ -17,7 +17,6 @@ body {
 
 h1 {
   margin: 20px;
-  font-weight: 600;
 }
 
 .container {
@@ -63,23 +62,10 @@ button:hover {
   transform: scale(1.05);
 }
 
-.primary {
-  background: #22c55e;
-  color: black;
-}
-
-.secondary {
-  background: #3b82f6;
-  color: white;
-}
-
-.danger {
-  background: #ef4444;
-}
-
-.slow {
-  background: #f59e0b;
-}
+.primary { background: #22c55e; color: black; }
+.secondary { background: #3b82f6; }
+.danger { background: #ef4444; }
+.slow { background: #f59e0b; }
 
 </style>
 </head>
@@ -87,6 +73,11 @@ button:hover {
 <body>
 
 <h1>🏓 Instant Replay</h1>
+
+<div class="controls">
+  <button class="primary" onclick="startCamera()">▶ Start</button>
+  <button class="danger" onclick="stopCamera()">⏹ Stop</button>
+</div>
 
 <div class="container">
 
@@ -101,9 +92,9 @@ button:hover {
 
     <div class="controls">
       <button class="primary" onclick="startReplay()">▶ Replay</button>
-      <button class="slow" onclick="setSlow(0.5)">🐢 0.5x</button>
-      <button class="slow" onclick="setSlow(0.25)">🐢 0.25x</button>
-      <button class="secondary" onclick="setSlow(1)">⚡ Normal</button>
+      <button class="slow" onclick="setSpeed(0.5)">🐢 0.5x</button>
+      <button class="slow" onclick="setSpeed(0.25)">🐢 0.25x</button>
+      <button class="secondary" onclick="setSpeed(1)">⚡ Normal</button>
     </div>
   </div>
 
@@ -112,35 +103,61 @@ button:hover {
 <script>
 let mediaRecorder;
 let buffer = [];
+let stream = null;
 
 const live = document.getElementById("live");
 const replay = document.getElementById("replay");
 
-// Caméra
-navigator.mediaDevices.getUserMedia({ video: true })
-.then(stream => {
-  live.srcObject = stream;
+// START caméra
+async function startCamera() {
+  if (stream) return;
 
-  mediaRecorder = new MediaRecorder(stream);
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    live.srcObject = stream;
 
-  mediaRecorder.ondataavailable = e => {
-    if (e.data.size > 0) {
-      buffer.push(e.data);
+    mediaRecorder = new MediaRecorder(stream);
 
-      // buffer ~5 secondes
-      if (buffer.length > 25) {
-        buffer.shift();
+    buffer = [];
+
+    mediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) {
+        buffer.push(e.data);
+
+        // ~5 secondes buffer
+        if (buffer.length > 25) {
+          buffer.shift();
+        }
       }
-    }
-  };
+    };
 
-  mediaRecorder.start(200);
+    mediaRecorder.start(200);
 
-})
-.catch(err => alert("Erreur caméra : " + err));
+  } catch (err) {
+    alert("Erreur caméra: " + err);
+  }
+}
 
-// Replay
+// STOP caméra
+function stopCamera() {
+  if (!stream) return;
+
+  stream.getTracks().forEach(track => track.stop());
+  live.srcObject = null;
+  stream = null;
+
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+}
+
+// REPLAY
 function startReplay() {
+  if (buffer.length === 0) {
+    alert("Pas encore de vidéo !");
+    return;
+  }
+
   const blob = new Blob(buffer, { type: "video/webm" });
   const url = URL.createObjectURL(blob);
 
@@ -149,8 +166,8 @@ function startReplay() {
   replay.play();
 }
 
-// Vitesse
-function setSlow(rate) {
+// vitesse
+function setSpeed(rate) {
   replay.playbackRate = rate;
 }
 </script>
