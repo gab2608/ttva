@@ -1,69 +1,157 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Instant Replay Ping Pong</title>
-  <style>
-    body { font-family: Arial; text-align: center; background:#111; color:white; }
-    video { width: 80%; max-width: 600px; margin: 10px; border-radius: 10px; }
-    button { padding: 10px 15px; margin: 5px; font-size: 16px; }
-  </style>
+<meta charset="UTF-8">
+<title>Ping Pong Replay</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+h1 {
+  margin: 20px;
+  font-weight: 600;
+}
+
+.container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: 90%;
+  max-width: 1000px;
+}
+
+.card {
+  background: rgba(255,255,255,0.05);
+  padding: 15px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+video {
+  width: 100%;
+  border-radius: 15px;
+  background: black;
+}
+
+.controls {
+  margin-top: 15px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+button {
+  border: none;
+  padding: 10px 15px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: 0.2s;
+}
+
+button:hover {
+  transform: scale(1.05);
+}
+
+.primary {
+  background: #22c55e;
+  color: black;
+}
+
+.secondary {
+  background: #3b82f6;
+  color: white;
+}
+
+.danger {
+  background: #ef4444;
+}
+
+.slow {
+  background: #f59e0b;
+}
+
+</style>
 </head>
+
 <body>
 
 <h1>🏓 Instant Replay</h1>
 
-<h3>Live</h3>
-<video id="live" autoplay muted playsinline></video>
+<div class="container">
 
-<h3>Replay</h3>
-<video id="replay" controls></video>
+  <div class="card">
+    <h3>🎥 Live</h3>
+    <video id="live" autoplay muted playsinline></video>
+  </div>
 
-<div>
-  <button onclick="startReplay()">🎬 Replay (5s)</button>
+  <div class="card">
+    <h3>🎬 Replay</h3>
+    <video id="replay" controls></video>
+
+    <div class="controls">
+      <button class="primary" onclick="startReplay()">▶ Replay</button>
+      <button class="slow" onclick="setSlow(0.5)">🐢 0.5x</button>
+      <button class="slow" onclick="setSlow(0.25)">🐢 0.25x</button>
+      <button class="secondary" onclick="setSlow(1)">⚡ Normal</button>
+    </div>
+  </div>
+
 </div>
 
 <script>
 let mediaRecorder;
-let chunks = [];
 let buffer = [];
 
 const live = document.getElementById("live");
 const replay = document.getElementById("replay");
 
-// 1. Caméra
-navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+// Caméra
+navigator.mediaDevices.getUserMedia({ video: true })
 .then(stream => {
   live.srcObject = stream;
 
-  // 2. Enregistrement en continu
-  mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+  mediaRecorder = new MediaRecorder(stream);
 
   mediaRecorder.ondataavailable = e => {
     if (e.data.size > 0) {
       buffer.push(e.data);
 
-      // garder seulement ~5 secondes
-      if (buffer.length > 25) { // approx (dépend du timeslice)
+      // buffer ~5 secondes
+      if (buffer.length > 25) {
         buffer.shift();
       }
     }
   };
 
-  // capture toutes les 200ms
   mediaRecorder.start(200);
 
 })
-.catch(err => alert(err));
+.catch(err => alert("Erreur caméra : " + err));
 
-// 3. Replay
+// Replay
 function startReplay() {
-  const blob = new Blob(buffer, { type: 'video/webm' });
+  const blob = new Blob(buffer, { type: "video/webm" });
   const url = URL.createObjectURL(blob);
 
   replay.src = url;
-  replay.playbackRate = 0.5; // ralenti
+  replay.playbackRate = 0.5;
   replay.play();
+}
+
+// Vitesse
+function setSlow(rate) {
+  replay.playbackRate = rate;
 }
 </script>
 
